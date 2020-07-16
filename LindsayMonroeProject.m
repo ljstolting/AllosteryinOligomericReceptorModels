@@ -1,17 +1,11 @@
 %% 
 
-%note: the fitting is finnicky and unpredictable the first two times you
-%run it. After that, the code works nicely. I don't know why...
+%I must have done something wrong with the function definitions: 
 
 %Formatting user inputs 
 if Simulate(1) == false
     pts = length(dimerxdata);%number of data points
 end
-%have to find way to make this general
-k_b = mon_ks(1);
-k_c = mon_ks(2);
-syms kb kc
-monkmat = [kb kc];
 
 if Simulate(1) == true
     pts = Simulate(2);
@@ -92,12 +86,6 @@ end
 for i=1:V
     disp([ sprintf('%d',C(i,:)) ' : ' sprintf('%s',Q(i))])
 end
-%% 
-if Simulate(1) == true && isempty(allopars)
-    disp('Order:')
-    disp(parnames)
-    error('Add allosteric parameter matrix in the order specified above and run again')
-end
 %% create symbolic matrix of monomer equilibrium constants
 mon_eq_consts = sym(size(ligand_intro));
 for i = 2:length(ligand_intro)+1
@@ -131,6 +119,12 @@ for i = 1:length(parnames)
     parnames{i} = str2sym(parnames{i});
 end
 %% 
+if Simulate(1) == true && isempty(allopars)
+    disp('Order:')
+    celldisp(parnames)
+    error('Add allosteric parameter matrix in the order specified above and run again')
+end
+%%
 %specify the response measure, either in terms of monomer or dimer states
 %for example, in the two state model, [1 0 0] ([a b c]) would indicate that
 %you want to calculate the percentage of monomer in state a
@@ -235,19 +229,19 @@ dimstate_fracs = dimstate_fracs .* frac_coeffs; %multiply each fractional part b
 for i = 1:length(dimstate_fracs)
     dimstate_fracs(i) = dimstate_fracs(i)*monstate_fracs(C(i,1))*monstate_fracs(C(i,2)); %multiply by each of the appropriate pi_monomer's
 end
-dimstate_fracs %show the dimer state fractions  
+dimstate_fracs;  
 %% Define the function to be fit
-pi_sym = sum(dimstate_fracs .* dim_resp_mat);
-pi_fun=matlabFunction(pi_sym,'Vars',[cell2sym(parnames) monkmat x]);
+temp = cell2sym(parnames);
+pi_sym = sum(dimstate_fracs .* dim_resp_mat) %to what extent does each state contribute to the response measure
+pi_temp_fun=matlabFunction(pi_sym,'vars',{mon_eq_consts temp 'x'});
+pi_fun=@(allostericpars,x)pi_temp_fun(mon_ks,allostericpars,x);
 
-%then, to make it into a function from a symbolic? must make the parameters
-%into vector
 %% Could simulate data based on provided parameters...
-pi_c=@(pars,x)(kb*kc*x.^2+pars(2)*pars(1)*kb^2*kc*x.^3+pars(2)*pars(1)^2*pars(3)*kb^2*kc^2*x.^4)./(1+2*kb*x+2*kb*kc*x.^2+pars(2)*kb^2*x.^2+2*pars(2)*pars(1)*kb^2*kc*x.^3+pars(2)*pars(1)^2*pars(3)*kb^2*kc^2*x.^4);
+%pi_c=@(pars,x)(kb*kc*x.^2+pars(2)*pars(1)*kb^2*kc*x.^3+pars(2)*pars(1)^2*pars(3)*kb^2*kc^2*x.^4)./(1+2*kb*x+2*kb*kc*x.^2+pars(2)*kb^2*x.^2+2*pars(2)*pars(1)*kb^2*kc*x.^3+pars(2)*pars(1)^2*pars(3)*kb^2*kc^2*x.^4);
 
 if Simulate(1) == true 
     dimerxdata = logspace(-3,3,pts);
-    pics = pi_c(allopars,dimerxdata);
+    pics = pi_fun(allopars,dimerxdata);
     dimerydata = pics + noise*normrnd(0,1,1,pts);
 end
 
@@ -259,7 +253,7 @@ set(gca, 'XScale', 'log')
 scatter(dimerxdata,dimerydata,'*','b')
 if Simulate(1) == true
     x = logspace(-3,3,1000);
-    plot(x,pi_c(allopars,x),'b')
+    plot(x,pi_fun(allopars,x),'b')
 end
 %% 
 base10combos = linspace(0,(2^k)-1,2^k);
@@ -281,7 +275,7 @@ for i = 1:2^k
             K = K+1;
         end
     syms dimerfit SSQ    
-    [dimerfit,SSQ] = lsqcurvefit(pi_c, guess, dimerxdata, dimerydata,lb,ub,options);
+    [dimerfit,SSQ] = lsqcurvefit(pi_fun, guess, dimerxdata, dimerydata,lb,ub,options);
     dimerfits_SSQs(i,:) = [dimerfit,SSQ];
     AICs(i,1) = pts*log(dimerfits_SSQs(i,k+1)/pts)+2*K+((2*K*(K+1))/(pts-K-1));
     end
@@ -289,7 +283,7 @@ end
 %% 
 x = logspace(-3,3,1000);
 for i = 1:2^k
-    plot(x,pi_c(dimerfits_SSQs(i,1:3),x))
+    plot(x,pi_fun(dimerfits_SSQs(i,1:length(allopars)),x))
 end
 
 labels = ["sample data", "original function"];
