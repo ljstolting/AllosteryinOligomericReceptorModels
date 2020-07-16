@@ -1,7 +1,5 @@
 %% 
 
-%I must have done something wrong with the function definitions: 
-
 %Formatting user inputs 
 if Simulate(1) == false
     pts = length(dimerxdata);%number of data points
