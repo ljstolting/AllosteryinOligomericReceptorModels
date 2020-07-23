@@ -1,4 +1,36 @@
+%% File Importing: must make general to all computers
+%Parameter values from .txt file
+opts = delimitedTextImportOptions("NumVariables", 2);
+opts.DataLines = [1, Inf];
+opts.Delimiter = ";";
+opts.VariableNames = ["Var1", "cc"];
+opts.SelectedVariableNames = "cc";
+opts.VariableTypes = ["string", "string"];
+opts.ExtraColumnsRule = "ignore";
+opts.EmptyLineRule = "read";
+opts.ConsecutiveDelimitersRule = "join";
+opts = setvaropts(opts, ["Var1", "cc"], "WhitespaceRule", "preserve");
+opts = setvaropts(opts, ["Var1", "cc"], "EmptyFieldRule", "auto");
+
+UserPars = readmatrix("MonroeProjectParameters.txt", opts);
+
+clear opts
+
+apred = str2num(UserPars(1)); %spanning tree, 7 is pretty much the limit for length due to concerns about testing the exponentially growing number of combinations
+ligand_intro = str2num(UserPars(2)); %each reaction/edge's order of x(the ligand)
+mons = str2double(UserPars(3)); %number or receptors in the oligomer
+mon_ks = str2num(UserPars(4)); %equilibrium constants for the monomer
+resp_meas = char(UserPars(5,1)); %which state is being measured
+allopars = str2num(UserPars(6)); %if simulate=true, these are parameters used to simulate
+Simulate = str2num(UserPars(7)); %simulate data based on input parameters or use data input by user?
+%% Data from excel spreadsheet, which was generated from allopars [10,1,1] and noise = .01
+if Simulate(1) == false
+    dimerdata = readmatrix('Exceldimerdata.xlsx');
+    dimerxdata = dimerdata(:,1).';
+    dimerydata = dimerdata(:,2).';
+end
 %% 
+%Dealing with equivalent equations?
 
 %Formatting user inputs 
 if Simulate(1) == false
@@ -13,10 +45,14 @@ end
 % name vertices and edges of T_G 
 m = length(apred);
 if m <= 7 % use first few letters of alphabet
-    syms b c d e f g
-    edges = [ 0 b c d e f g ];
+    syms a b c d e f g
+    monstatenames = [ a b c d e f g];
+    edges = monstatenames;
+    edges(1) = 0;
 else % use e_i 
-    edges = sym('e%d', [1 m]); edges(1)=NaN; 
+    monstatenames = sym('e%d', [1 m]);
+    edges=monstatenames;
+    edges(1)=NaN; 
 end
 
 v = length(apred); % number of vertices in T_G
@@ -26,8 +62,6 @@ for i = 2:v
     estr{i-1} = ['e' num2str(i) ]; 
     T(i,apred(i))=edges(i); % T_G is lower triangular 
 end
-% T % show T_G
-% mons % show mons 
 
 % P(i) is the sum of edges from a_i to root; P(1)=0
 P = sym(zeros(1,m));
@@ -49,14 +83,6 @@ for i=1:size(CC,1)   %column length of CC
     end
 end
 C = unique(C,'rows'); % done
-
-% [N,M]=meshgrid(1:m,1:m);
-% temp1=cat(2,N',M');
-% CC=reshape(temp1,[],2);
-% for i = 1:length(CC)
-%     CC(i,:)=sort(CC(i,:));
-% end
-% C=unique(CC,'rows');
 
 V = size(C,1);
 
@@ -81,9 +107,9 @@ for i=1:V
     Q(i) = expand(Q(i));
 end
 
-for i=1:V
-    disp([ sprintf('%d',C(i,:)) ' : ' sprintf('%s',Q(i))])
-end
+% for i=1:V
+%     disp([ sprintf('%d',C(i,:)) ' : ' sprintf('%s',Q(i))])
+% end
 %% create symbolic matrix of monomer equilibrium constants
 mon_eq_consts = sym(size(ligand_intro));
 for i = 2:length(ligand_intro)+1
@@ -127,7 +153,7 @@ end
 %for example, in the two state model, [1 0 0] ([a b c]) would indicate that
 %you want to calculate the percentage of monomer in state a
 %the program will convert this to [1 .5 .5 0 0 0] ([aa ab ac bb bc cc])
-monnames = ['a' 'b' 'c']; %find way to make this from spanning tree
+monnames = monstatenames(1:m);
 dim_resp_mat = zeros(1,length(C));
 G = [];
 for i=1:length(C)
@@ -135,36 +161,44 @@ for i=1:length(C)
 end
 G = char(G);
 
-if length(resp_meas)==2
-    [tf1, idx1] = ismember(resp_meas(1),monnames);
-    [tf2, idx2] = ismember(resp_meas(2),monnames);
-    converted = [num2str(idx1) num2str(idx2)];
-    for i = 1:length(G)
-        if G(i,:) == converted
-            idx = i;
+if length(resp_meas)>=length(char(edges(2)))
+    if ismember("custom",resp_meas)==true
+        temp = split(resp_meas,":");
+        if length(temp)==1
+            disp('Order:')
+            disp(char(C+'a'-1))
+            error('Add custom response variable matrix in the order above and run again')
         end
+        dim_resp_mat = cell2mat(temp(2));
+        dim_resp_mat = str2num(dim_resp_mat);
     end
-    dim_resp_mat(1,idx) = 1;
+    if ismember("custom",resp_meas)==false
+        temp = length(char(edges(2))):length(char(edges(2))):length(resp_meas);
+        temp = [0 temp];
+        indecies = [];
+        for i=1:length(temp)-1
+            [~, idx] = ismember(resp_meas(temp(i)+1:temp(i+1)),monnames);
+            indecies = [indecies idx];
+        end
+        %converted = string(indecies);
+        %converted = reshape(char(converted),1, []);
+        for i = 1:length(C)
+            if (C(i,:) == indecies) == ones(1,length(indecies))
+                dimidx = i;
+            end
+        end
+    end    
+    dim_resp_mat(1,dimidx) = 1;
 end
 
-if length(resp_meas) == 1
+if length(resp_meas) == length(char(edges(2)))
     for i = 1:length(C)
-        [tf, idx] = ismember(resp_meas,monnames);
+        [~, idx] = ismember(resp_meas,monnames);
         repeats = sum(C(i,:)==idx);
         dim_resp_mat(1,i) = repeats/mons;
     end
 end
 
-if ismember('custom',resp_meas)==true
-    temp = split(resp_meas,":");
-    if length(temp)==1
-        disp('Order:')
-        disp(char(C+'a'-1))
-        error('Add custom response variable matrix in the order above and run again')
-    end
-    dim_resp_mat = cell2mat(temp(2));
-    dim_resp_mat = str2num(dim_resp_mat);
-end
 %% write the function that is characterized by the given response measure
 %first, use ligand_intro to determine what pi_monomerstate's are
 syms x
@@ -227,10 +261,12 @@ dimstate_fracs = dimstate_fracs .* frac_coeffs; %multiply each fractional part b
 for i = 1:length(dimstate_fracs)
     dimstate_fracs(i) = dimstate_fracs(i)*monstate_fracs(C(i,1))*monstate_fracs(C(i,2)); %multiply by each of the appropriate pi_monomer's
 end
-dimstate_fracs;  
+
+% convert from relative fractions to actual fractions~
+dimstate_fracs = dimstate_fracs./sum(dimstate_fracs);
 %% Define the function to be fit
+pi_sym = sum(dimstate_fracs .* dim_resp_mat); %to what extent does each state contribute to the response measure
 temp = cell2sym(parnames);
-pi_sym = sum(dimstate_fracs .* dim_resp_mat) %to what extent does each state contribute to the response measure
 pi_temp_fun=matlabFunction(pi_sym,'vars',{mon_eq_consts temp 'x'});
 pi_fun=@(allostericpars,x)pi_temp_fun(mon_ks,allostericpars,x);
 
