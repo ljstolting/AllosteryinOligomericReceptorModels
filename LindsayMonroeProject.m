@@ -12,11 +12,12 @@ opts.ConsecutiveDelimitersRule = "join";
 opts = setvaropts(opts, ["Var1", "cc"], "WhitespaceRule", "preserve");
 opts = setvaropts(opts, ["Var1", "cc"], "EmptyFieldRule", "auto");
 
-UserPars = readmatrix("MonroeProjectParameters.txt", opts);
+ParametersFile = uigetfile('.txt');
+UserPars = readmatrix(ParametersFile, opts);
 
 clear opts
 
-apred = str2num(UserPars(1)); %spanning tree, 7 is pretty much the limit for length due to concerns about testing the exponentially growing number of combinations
+apred = str2num(UserPars(1)); %#ok<*ST2NM> %spanning tree, 7 is pretty much the limit for length due to concerns about testing the exponentially growing number of combinations
 ligand_intro = str2num(UserPars(2)); %each reaction/edge's order of x(the ligand)
 mons = str2double(UserPars(3)); %number or receptors in the oligomer
 mon_ks = str2num(UserPars(4)); %equilibrium constants for the monomer
@@ -24,8 +25,10 @@ resp_meas = char(UserPars(5,1)); %which state is being measured
 allopars = str2num(UserPars(6)); %if simulate=true, these are parameters used to simulate
 Simulate = str2num(UserPars(7)); %simulate data based on input parameters or use data input by user?
 %% Data from excel spreadsheet, which was generated from allopars [10,1,1] and noise = .01
+
 if Simulate(1) == false
-    dimerdata = readmatrix('Exceldimerdata.xlsx');
+    OligomerDataFile = uigetfile;
+    dimerdata = readmatrix(OligomerDataFile);
     dimerxdata = dimerdata(:,1).';
     dimerydata = dimerdata(:,2).';
 end
@@ -214,7 +217,9 @@ for i = 1:length(P)
     monstate_fracs(i) = str2sym(edit);
 end
 monstate_fracs(1) = 1;
-monstate_fracs = monstate_fracs./sum(monstate_fracs);
+%monstate_fracs = monstate_fracs./sum(monstate_fracs); %unneccessary
+%because each monfraction is divided by same and there is same number of
+%monfracs in each expression
 %next, reformat the allosteric parameters from Q to include in the dimer state fraction matrix
 dimstate_fracs = sym(zeros(size(Q.')));
 for i = 1:length(Q)
@@ -278,7 +283,6 @@ if Simulate(1) == true
     pics = pi_fun(allopars,dimerxdata);
     dimerydata = pics + noise*normrnd(0,1,1,pts);
 end
-
 %% plot the data to be fit
 
 figure 
@@ -289,6 +293,7 @@ if Simulate(1) == true
     x = logspace(-3,3,1000);
     plot(x,pi_fun(allopars,x),'b')
 end
+
 %% 
 base10combos = linspace(0,(2^k)-1,2^k);
 Models = dec2bin(base10combos);
@@ -320,7 +325,7 @@ for i = 1:2^k
     plot(x,pi_fun(dimerfits_SSQs(i,1:length(allopars)),x))
 end
 
-labels = ["sample data", "original function"];
+labels = ["Sample Data", "Template Function"];
 for i = 1:2^k
     labels = [labels ,Models(i,:)];
 end
