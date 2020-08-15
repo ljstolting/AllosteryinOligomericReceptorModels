@@ -1,7 +1,7 @@
-Spanning Tree;[0 1 2]
-Ligand Edges; [1 1]
-# Units;2
-Monomer Equilibrium Constants; [5 5]
-Response Measure;c
-Simulation;[true 20 .01]
-Allosteric Parameters for Simulation; [1 1 100]
+Spanning Tree;[0 1 1 2]
+Ligand Edges;[1 1 1]
+Number of Units;2
+Monomer Association/Dissociation Constants;[5 5 5]
+Response Measure;cc
+Allosteric Parameters for Simulation;[1 1 15 1 1 1]
+Simulation;[true, 20, .005]
